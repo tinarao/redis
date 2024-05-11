@@ -7,7 +7,6 @@ import (
 	"log"
 	"log/slog"
 	"net"
-	"reflect"
 	"time"
 )
 
@@ -25,6 +24,7 @@ type Server struct {
 	addPeerChannel chan *Peer
 	quitChannel    chan struct{}
 	msgChannel     chan []byte
+	kv             *KV
 }
 
 func newServer(cfg Config) *Server {
@@ -38,6 +38,7 @@ func newServer(cfg Config) *Server {
 		addPeerChannel: make(chan *Peer),
 		quitChannel:    make(chan struct{}),
 		msgChannel:     make(chan []byte),
+		kv:             NewKV(),
 	}
 }
 
@@ -54,15 +55,14 @@ func (s *Server) start() error {
 	return s.startAcceptingLoop()
 }
 
-func (s *Server) HandleRawMsg(rawMessage []byte) error {
+func (s *Server) handleRawMsg(rawMessage []byte) error {
 	cmd, err := parseCmd(string(rawMessage))
 	if err != nil {
 		return err
 	}
-	fmt.Printf("got: %+v\ntype: %s\n", cmd, reflect.TypeOf(cmd))
 	switch v := cmd.(type) {
 	case SetCommand:
-		slog.Debug("somebody wants to set a key into a hashtable", "key", v.key, "val", v.val)
+		return s.kv.Set(v.key, v.val)
 	}
 
 	return nil
@@ -72,7 +72,7 @@ func (s *Server) loop() {
 	for {
 		select {
 		case rawMsg := <-s.msgChannel:
-			if err := s.HandleRawMsg(rawMsg); err != nil {
+			if err := s.handleRawMsg(rawMsg); err != nil {
 				slog.Error("err while handling a message", "err", err.Error())
 				continue
 			}
@@ -108,8 +108,8 @@ func (s *Server) handleConnection(conn net.Conn) {
 }
 
 func main() {
+	srv := newServer(Config{})
 	go func() {
-		srv := newServer(Config{})
 		if err := srv.start(); err != nil {
 			log.Fatalf("could not start a server: %s\n", err)
 		}
@@ -121,15 +121,17 @@ func main() {
 
 	for {
 		var key, val string
-		fmt.Println("Введите ключ: ")
+		fmt.Print("Введите ключ: ")
 		fmt.Scan(&key)
-		fmt.Println("Введите значение: ")
+		fmt.Print("Введите значение: ")
 		fmt.Scan(&val)
 
 		if err := cl.Set(context.Background(), key, val); err != nil {
 			log.Fatal(err)
 		}
 		time.Sleep(time.Second)
+
+		fmt.Println(srv.kv.data)
 	}
 
 	select {} // block

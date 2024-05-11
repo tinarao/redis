@@ -37,7 +37,6 @@ func parseCmd(msg string) (Command, error) {
 			for _, value := range v.Array() {
 				switch value.String() {
 				case CommandSET:
-					fmt.Printf("%v\n", len(v.Array()))
 					if len(v.Array()) != 3 {
 						return nil, fmt.Errorf("invalid number of args for set cmd")
 					}
@@ -45,7 +44,6 @@ func parseCmd(msg string) (Command, error) {
 						key: v.Array()[1].String(),
 						val: v.Array()[2].String(),
 					}
-					fmt.Printf("%+v\n", cmd)
 					return cmd, nil
 				default:
 					return nil, fmt.Errorf("invalid or unknown command recieved: %s", msg)

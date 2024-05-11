@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log/slog"
 	"net"
 )
 
@@ -20,8 +19,6 @@ func (p *Peer) readLoop() error {
 		msgBuf := make([]byte, n)
 		copy(msgBuf, buf[:n])
 		p.msgChannel <- msgBuf
-
-		slog.Info("got message", "msg", string(buf[:n]), "bytes", n)
 	}
 }
 
