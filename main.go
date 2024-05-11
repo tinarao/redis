@@ -1,12 +1,14 @@
-// https://youtu.be/LMrxfWB6sbQ?si=NEJTXXNYtDbt52DN&t=715
-
 package main
 
 import (
+	"context"
 	"fmt"
+	"github.com/tinarao/redis/client"
 	"log"
 	"log/slog"
 	"net"
+	"reflect"
+	"time"
 )
 
 // DefListenAddr represents default TCP port redis client is listening on
@@ -52,8 +54,17 @@ func (s *Server) start() error {
 	return s.startAcceptingLoop()
 }
 
-func (s *Server) handleRawMsg(raw []byte) error {
-	fmt.Printf("raw: %s\n", string(raw))
+func (s *Server) HandleRawMsg(rawMessage []byte) error {
+	cmd, err := parseCmd(string(rawMessage))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("got: %+v\ntype: %s\n", cmd, reflect.TypeOf(cmd))
+	switch v := cmd.(type) {
+	case SetCommand:
+		slog.Debug("somebody wants to set a key into a hashtable", "key", v.key, "val", v.val)
+	}
+
 	return nil
 }
 
@@ -61,12 +72,12 @@ func (s *Server) loop() {
 	for {
 		select {
 		case rawMsg := <-s.msgChannel:
-			if err := s.handleRawMsg(rawMsg); err != nil {
-				slog.Error("raw msg err", "err", err.Error())
-				return
+			if err := s.HandleRawMsg(rawMsg); err != nil {
+				slog.Error("err while handling a message", "err", err.Error())
+				continue
 			}
 		case <-s.quitChannel:
-			return
+			continue
 		case peer := <-s.addPeerChannel:
 			s.peers[peer] = true
 		}
@@ -97,8 +108,29 @@ func (s *Server) handleConnection(conn net.Conn) {
 }
 
 func main() {
-	srv := newServer(Config{})
-	if err := srv.start(); err != nil {
-		log.Fatalf("could not start a server: %s\n", err)
+	go func() {
+		srv := newServer(Config{})
+		if err := srv.start(); err != nil {
+			log.Fatalf("could not start a server: %s\n", err)
+		}
+	}()
+
+	time.Sleep(time.Second)
+
+	cl := client.New("localhost:6379")
+
+	for {
+		var key, val string
+		fmt.Println("Введите ключ: ")
+		fmt.Scan(&key)
+		fmt.Println("Введите значение: ")
+		fmt.Scan(&val)
+
+		if err := cl.Set(context.Background(), key, val); err != nil {
+			log.Fatal(err)
+		}
+		time.Sleep(time.Second)
 	}
+
+	select {} // block
 }
